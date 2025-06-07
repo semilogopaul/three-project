@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sci-Fi Portal Scene - Three.js</title>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000;
+      }
+      canvas {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Three.js with ES6 modules -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module">
+      // Import Three.js and OrbitControls
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+      // Wait for OrbitControls to load
+      function initScene() {
+        try {
+          // Scene Setup
+          const scene = new THREE.Scene();
+          scene.fog = new THREE.FogExp2(0x000011, 0.02); // Lighter fog
+
+          const camera = new THREE.PerspectiveCamera(
+            75,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            100
+          );
+          camera.position.set(0, 5, 8); // Better starting position
+
+          const renderer = new THREE.WebGLRenderer({ antialias: true });
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          document.body.appendChild(renderer.domElement);
+
+          // Controls
+          console.log("OrbitControls available:", typeof OrbitControls);
+          const controls = new OrbitControls(camera, renderer.domElement);
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.05;
+
+          // Lighting
+          const ambient = new THREE.AmbientLight(0x404040, 0.6); // Brighter ambient
+          scene.add(ambient);
+
+          const pointLight = new THREE.PointLight(0x00ffff, 3, 50);
+          pointLight.position.set(0, 5, 5);
+          scene.add(pointLight);
+
+          // Add directional light for better visibility
+          const directionalLight = new THREE.DirectionalLight(0x0088ff, 1);
+          directionalLight.position.set(0, 10, 10);
+          scene.add(directionalLight);
+
+          // Shader Material for Portal
+          const portalUniforms = {
+            time: { value: 0 },
+          };
+
+          const portalMaterial = new THREE.ShaderMaterial({
+            uniforms: portalUniforms,
+            vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+            fragmentShader: `
+          uniform float time;
+          varying vec2 vUv;
+          void main() {
+            vec2 center = vUv - 0.5;
+            float r = length(center);
+            
+            // Enhanced glow effect
+            float glow = 0.3 / (r + 0.05);
+            
+            // Multiple wave patterns
+            float wave1 = sin(8.0 * r - time * 2.0);
+            float wave2 = sin(15.0 * r + time * 1.5);
+            float spiral = sin(atan(center.y, center.x) * 6.0 + time * 2.0);
+            
+            glow += 0.2 * wave1 + 0.1 * wave2 + 0.15 * spiral;
+            
+            // Color variation
+            vec3 color1 = vec3(0.1, 0.8, 1.0); // Cyan
+            vec3 color2 = vec3(0.8, 0.1, 1.0); // Magenta
+            vec3 finalColor = mix(color1, color2, sin(time + r * 5.0) * 0.5 + 0.5);
+            
+            gl_FragColor = vec4(finalColor * glow, glow * 0.8);
+          }
+        `,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide,
+          });
+
+          // Portal Geometry
+          const portal = new THREE.Mesh(
+            new THREE.RingGeometry(2, 2.4, 64),
+            portalMaterial
+          );
+          portal.rotation.x = Math.PI / 2;
+          scene.add(portal); // Particles
+          const particles = new THREE.BufferGeometry();
+          const count = 1000;
+          const positions = new Float32Array(count * 3);
+          const colors = new Float32Array(count * 3);
+
+          for (let i = 0; i < count; i++) {
+            const i3 = i * 3;
+            positions[i3] = (Math.random() - 0.5) * 30;
+            positions[i3 + 1] = (Math.random() - 0.5) * 30;
+            positions[i3 + 2] = (Math.random() - 0.5) * 30;
+
+            // Random colors between cyan and magenta
+            colors[i3] = Math.random() * 0.5 + 0.5; // R
+            colors[i3 + 1] = Math.random() * 0.5 + 0.5; // G
+            colors[i3 + 2] = 1.0; // B
+          }
+
+          particles.setAttribute(
+            "position",
+            new THREE.BufferAttribute(positions, 3)
+          );
+          particles.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+
+          const particleMaterial = new THREE.PointsMaterial({
+            size: 0.2,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.8,
+            blending: THREE.AdditiveBlending,
+          });
+          const pointCloud = new THREE.Points(particles, particleMaterial);
+          scene.add(pointCloud);
+
+          // Add some geometric elements for context
+          const ringGeometry = new THREE.TorusGeometry(3.5, 0.1, 8, 32);
+          const ringMaterial = new THREE.MeshPhongMaterial({
+            color: 0x00ffff,
+            emissive: 0x002244,
+            transparent: true,
+            opacity: 0.7,
+          });
+          const outerRing = new THREE.Mesh(ringGeometry, ringMaterial);
+          outerRing.rotation.x = Math.PI / 2;
+          scene.add(outerRing);
+
+          // Add a floor plane for reference
+          const floorGeometry = new THREE.PlaneGeometry(20, 20);
+          const floorMaterial = new THREE.MeshPhongMaterial({
+            color: 0x111111,
+            transparent: true,
+            opacity: 0.3,
+          });
+          const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+          floor.rotation.x = -Math.PI / 2;
+          floor.position.y = -5;
+          scene.add(floor);
+
+          // Add a reference sphere to ensure visibility
+          const testSphere = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 32, 32),
+            new THREE.MeshPhongMaterial({ color: 0xffffff, emissive: 0x222222 })
+          );
+          testSphere.position.set(5, 2, 0);
+          scene.add(testSphere);
+
+          // Animate
+          const clock = new THREE.Clock();
+          function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+            portalUniforms.time.value = elapsedTime;
+
+            // Portal animations
+            portal.rotation.z += 0.005;
+
+            // Outer ring counter-rotation
+            outerRing.rotation.z -= 0.003;
+
+            // Particle system animation
+            pointCloud.rotation.y += 0.001;
+            pointCloud.rotation.x += 0.0005;
+
+            controls.update();
+            renderer.render(scene, camera);
+          }
+          animate();
+
+          // Responsive
+          window.addEventListener("resize", () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+          });
+        } catch (error) {
+          console.error("Error initializing scene:", error);
+          document.body.innerHTML =
+            '<div style="color: white; padding: 20px;">Error loading scene. Check console for details.</div>';
+        }
+      } // Initialize when page loads
+      window.addEventListener("load", () => {
+        // Give a moment for all scripts to load
+        setTimeout(initScene, 100);
+      });
+    </script>
+  </body>
+</html>
